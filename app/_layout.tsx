@@ -1,171 +1,210 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
-import "../global.css";
+// app/_layout.tsx
+import * as Notifications from 'expo-notifications';
+import { Stack, useRouter } from 'expo-router';
+import React, { useEffect, useRef } from 'react';
+import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import Toast, {
+  BaseToast,
+  ErrorToast,
+  ToastConfig,
+} from 'react-native-toast-message';
+
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
-import api from '../src/utils/api';
+import { setupNotificationChannels } from '../src/utils/notificationHelper';
 
-// Component untuk mengecek apakah mitra sudah melengkapi data DAN status verifikasi
-function MitraCheckGuard({ children }: { children: React.ReactNode }) {
-  const { user, isLoggedIn } = useAuth();
-  const [isMitraComplete, setIsMitraComplete] = useState<boolean | null>(null);
-  const [isVerified, setIsVerified] = useState<boolean | null>(null);
-  const [checking, setChecking] = useState(true);
-  const hasRedirected = useRef(false);
+const toastConfig: ToastConfig = {
+  success: props => (
+    <BaseToast
+      {...props}
+      style={styles.toastBase}
+      contentContainerStyle={styles.toastContent}
+      text1Style={styles.toastText1}
+      text2Style={styles.toastText2}
+    />
+  ),
+  error: props => (
+    <ErrorToast
+      {...props}
+      style={[styles.toastBase, { borderLeftColor: '#EF4444', borderLeftWidth: 4 }]}
+      contentContainerStyle={styles.toastContent}
+      text1Style={styles.toastText1}
+      text2Style={[styles.toastText2, { color: '#FF9494' }]}
+    />
+  ),
+};
+
+function RootLayoutContent() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const pathname = usePathname();
+  const notificationListenerRef = useRef<any>(null);
+  const responseListenerRef = useRef<any>(null);
+  const { isLoading, user, authToken } = useAuth();
 
+  // 🔥 Setup StatusBar
   useEffect(() => {
-    const checkMitraProfile = async () => {
-      if (!isLoggedIn || !user) {
-        setChecking(false);
-        return;
-      }
+    StatusBar.setBackgroundColor('#FF0000');
+    StatusBar.setBarStyle('light-content');
+    StatusBar.setTranslucent(false);
+  }, []);
 
-      // Hanya cek untuk role mitra
-      if (user.role !== 'mitra') {
-        setIsMitraComplete(true);
-        setChecking(false);
-        return;
-      }
+  // Setup notifikasi dan register token saat auth ready
+  useEffect(() => {
+    const setupNotifications = async () => {
+      await setupNotificationChannels();
 
-      // Cek apakah sudah di halaman register-mitra atau pending-review
-      const isInRegisterMitra = pathname === '/(auth)/register-mitra' ||
-        pathname.includes('/register-mitra');
-      const isInPendingReview = pathname === '/(auth)/pending-review' ||
-        pathname.includes('/pending-review');
-
-      // Jika sudah di halaman register-mitra atau pending-review, jangan redirect lagi
-      if (isInRegisterMitra || isInPendingReview) {
-        setChecking(false);
-        return;
-      }
-
-      // Prevent multiple redirects
-      if (hasRedirected.current) {
-        setChecking(false);
-        return;
-      }
-
-      try {
-        const token = await AsyncStorage.getItem('userToken');
-        if (!token) {
-          setIsMitraComplete(false);
-          setChecking(false);
-          return;
-        }
-
-        // 1. Cek apakah mitra sudah mengisi data lengkap
-        const profileResponse = await api.get(`/mitra/check-profile/${user.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const isComplete = profileResponse.data?.data?.is_complete || false;
-        setIsMitraComplete(isComplete);
-
-        // 2. Cek status verifikasi mitra
-        let isMitraVerified = false;
-        try {
-          const statusResponse = await api.get(`/mitra/status/${user.id}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          isMitraVerified = statusResponse.data?.data?.is_verified === true;
-          setIsVerified(isMitraVerified);
-          console.log('Mitra status - is_registered:', statusResponse.data?.data?.is_registered);
-          console.log('Mitra status - is_verified:', isMitraVerified);
-        } catch (statusError) {
-          console.log('Mitra belum terdaftar atau error:', statusError);
-          setIsVerified(false);
-        }
-
-        // 3. Logika redirect
-        // Jika belum lengkap, redirect ke register-mitra
-        if (!isComplete && !hasRedirected.current) {
-          hasRedirected.current = true;
-          router.replace('/(auth)/register-mitra');
-          return;
-        }
-
-        // Jika sudah lengkap tapi belum terverifikasi, redirect ke pending-review
-        if (isComplete && !isMitraVerified && !hasRedirected.current) {
-          hasRedirected.current = true;
-          router.replace('/(auth)/pending-review');
-          return;
-        }
-
-        setChecking(false);
-      } catch (error) {
-        console.error('Error checking mitra profile:', error);
-        setIsMitraComplete(false);
-        setChecking(false);
+      if (user?.id && authToken) {
+        const { registerDeviceTokenToBackend } = await import('../src/utils/notificationHelper');
+        await registerDeviceTokenToBackend(user.id.toString(), authToken);
       }
     };
 
-    checkMitraProfile();
-  }, [isLoggedIn, user, pathname]);
+    setupNotifications();
+  }, [user, authToken]);
 
-  if (checking) {
-    return (
-      <View className="flex-1 justify-center items-center bg-white">
-        <ActivityIndicator size="large" color="#FF0000" />
-        <Text className="mt-4 text-gray-500">Memeriksa profil mitra...</Text>
-      </View>
-    );
-  }
+  // 🔥 FUNGSI REDIRECT YANG DIPANGGIL DARI MANA SAJA
+  const handleRedirect = (data: any) => {
+    console.log('🔀 [REDIRECT] Redirecting with data:', data);
 
-  return <>{children}</>;
-}
-
-function RootLayoutNav() {
-  const { isLoggedIn, isLoading } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
-    const inRegisterMitra = segments[1] === 'register-mitra';
-    const inPendingReview = segments[1] === 'pending-review';
-
-    if (!isLoggedIn && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (isLoggedIn && inAuthGroup && !inRegisterMitra && !inPendingReview) {
-      router.replace('/(tabs)');
+    if (!data) {
+      console.log('⚠️ [REDIRECT] No data provided');
+      return;
     }
-  }, [isLoggedIn, segments, isLoading]);
+
+    // Prioritas 1: order_id (dari notifikasi order)
+    if (data?.order_id) {
+      const orderId = parseInt(data.order_id);
+      if (!isNaN(orderId) && orderId > 0) {
+        console.log(`✅ [REDIRECT] Navigating to order/${orderId}`);
+        router.replace({
+          pathname: '/order/[id]',
+          params: { id: orderId.toString() },
+        });
+        return;
+      }
+    }
+
+    // Prioritas 2: screen orders_mitra
+    if (data?.screen === 'orders_mitra') {
+      console.log(`✅ [REDIRECT] Navigating to orders_mitra`);
+      router.replace('/(tabs)/orders');
+      return;
+    }
+
+    // Prioritas 3: screen dashboard_mitra
+    if (data?.screen === 'dashboard_mitra') {
+      console.log(`✅ [REDIRECT] Navigating to dashboard_mitra`);
+      router.replace('/(tabs)');
+      return;
+    }
+
+    // Prioritas 4: orderId (format alternatif)
+    if (data?.orderId) {
+      const orderId = parseInt(data.orderId);
+      if (!isNaN(orderId) && orderId > 0) {
+        console.log(`✅ [REDIRECT] Navigating to order/${orderId} (from orderId)`);
+        router.replace({
+          pathname: '/order/[id]',
+          params: { id: orderId.toString() },
+        });
+        return;
+      }
+    }
+
+    console.warn('⚠️ [REDIRECT] No matching route for data:', data);
+  };
+
+  // 🔥 Setup notification listeners dengan cleanup
+  useEffect(() => {
+    console.log('🔔 [NOTIFICATION] Setting up notification listeners...');
+
+    // 🔥 Listener untuk notifikasi saat app di FOREGROUND
+    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+      console.log('🔔 [NOTIFICATION] Received in foreground:', notification);
+      const { title, body, data } = notification.request.content;
+
+      // Tampilkan Toast sebagai notifikasi visual
+      Toast.show({
+        type: 'success',
+        text1: title || 'Pesanan Baru!',
+        text2: body || 'Klik untuk melihat detail pesanan',
+        onPress: () => {
+          console.log('🔔 [TOAST] Toast pressed, redirecting...');
+          handleRedirect(data);
+        },
+        visibilityTime: 5000,
+        autoHide: true,
+      });
+    });
+
+    // 🔥 Listener untuk notifikasi saat DIKLIK (dari background/kill state)
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('🔔 [NOTIFICATION] Clicked from background/kill:', response);
+      const data = response.notification.request.content.data;
+      handleRedirect(data);
+    });
+
+    notificationListenerRef.current = notificationListener;
+    responseListenerRef.current = responseListener;
+
+
+  }, []);
 
   if (isLoading) {
     return (
-      <View className="flex-1 justify-center items-center bg-white">
+      <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color="#FF0000" />
       </View>
     );
   }
 
   return (
-    <MitraCheckGuard>
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="order/[id]"
-          options={{
-            title: 'Detail Pesanan',
-            headerBackTitle: 'Kembali',
-            headerStyle: { backgroundColor: '#FF0000' },
-            headerTintColor: '#fff',
-          }}
-        />
-      </Stack>
-    </MitraCheckGuard>
+    <View style={styles.container}>
+      {/* StatusBar sudah di-set di useEffect */}
+      <View style={{ flex: 1 }}>
+        <Stack screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#fff' },
+          statusBarBackgroundColor: '#FF0000',
+          statusBarStyle: 'light',
+        }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+          <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+          <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        </Stack>
+      </View>
+      <View style={{ height: insets.bottom, backgroundColor: '#fff' }} />
+      <Toast config={toastConfig} position="top" topOffset={insets.top + 10} />
+    </View>
+  );
+}
+
+function RootLayoutWithAuth() {
+  return (
+    <AuthProvider>
+      <RootLayoutContent />
+    </AuthProvider>
   );
 }
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <RootLayoutWithAuth />
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  centerContent: { justifyContent: 'center', alignItems: 'center' },
+  toastBase: { backgroundColor: '#1E1E1E', borderRadius: 12, height: 65, width: '90%', alignSelf: 'center', elevation: 10 },
+  toastContent: { paddingHorizontal: 20 },
+  toastText1: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  toastText2: { fontSize: 12, color: '#A1A1AA', marginTop: 2 },
+});

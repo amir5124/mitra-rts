@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
+    Platform,
     ScrollView,
     Text,
     TouchableOpacity,
@@ -31,9 +33,38 @@ interface UserData {
     profile_pic: string | null;
 }
 
+// Data profil mitra yang disimpan saat registrasi
+interface MitraProfileData {
+    user_id: string | number;
+    specialization: string[];
+    address: string;
+    address_latitude: number | null;
+    address_longitude: number | null;
+    service_radius_km: number;
+    working_days: string[];
+    working_start: string;
+    working_end: string;
+    bank_name: string;
+    bank_account_number: string;
+    bank_account_name: string;
+    certificate_uri: string;
+    registered_at: string;
+}
+
+// Label hari Indonesia
+const DAY_LABELS: Record<string, string> = {
+    senin: 'Senin',
+    selasa: 'Selasa',
+    rabu: 'Rabu',
+    kamis: 'Kamis',
+    jumat: 'Jumat',
+    sabtu: 'Sabtu',
+    minggu: 'Minggu',
+};
+
 export default function PendingReviewScreen() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [loading, setLoading] = useState(true);
     const [mitraStatus, setMitraStatus] = useState<MitraStatus | null>(null);
     const [specializations, setSpecializations] = useState<string[]>([]);
@@ -41,40 +72,81 @@ export default function PendingReviewScreen() {
     const [userData, setUserData] = useState<UserData | null>(null);
     const [loadingUser, setLoadingUser] = useState(true);
 
+    // ✅ State untuk data mitra dari AsyncStorage
+    const [mitraProfileData, setMitraProfileData] = useState<MitraProfileData | null>(null);
+
     const userId = user?.id;
 
-    // DEBUG: Cek data dari AuthContext
-    console.log('=== DEBUG AUTH CONTEXT ===');
-    console.log('user dari AuthContext:', JSON.stringify(user, null, 2));
-    console.log('userId:', userId);
-    console.log('==========================');
+    const handleLogout = async () => {
+        const logoutProcess = async () => {
+            try {
+                await logout();
+                Toast.show({
+                    type: 'success',
+                    text1: 'Berhasil Logout',
+                    text2: 'Anda telah keluar dari aplikasi',
+                    visibilityTime: 2000,
+                });
+                setTimeout(() => {
+                    router.replace('/(auth)/login');
+                }, 1500);
+            } catch (e) {
+                if (Platform.OS === 'web') {
+                    alert("Gagal Logout");
+                } else {
+                    Alert.alert("Error", "Gagal Logout");
+                }
+                console.error('Logout error:', e);
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm("Apakah Anda yakin ingin keluar?")) {
+                await logoutProcess();
+            }
+        } else {
+            Alert.alert("Logout", "Yakin ingin keluar?", [
+                { text: "Batal", style: "cancel" },
+                { text: "Keluar", style: "destructive", onPress: logoutProcess }
+            ]);
+        }
+    };
+
+    // ✅ Ambil data mitra dari AsyncStorage (hasil registrasi)
+    const loadMitraProfileFromStorage = async () => {
+        try {
+            const stored = await AsyncStorage.getItem('mitraProfileData');
+            if (stored) {
+                const parsed: MitraProfileData = JSON.parse(stored);
+                setMitraProfileData(parsed);
+                console.log('✅ Mitra profile loaded from AsyncStorage:', parsed);
+
+                // Gunakan specialization dari storage sebagai fallback awal
+                if (parsed.specialization && parsed.specialization.length > 0) {
+                    setSpecializations(parsed.specialization);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading mitra profile from AsyncStorage:', error);
+        }
+    };
 
     // Ambil data user lengkap dari API
     const fetchUserData = async () => {
         if (!userId) {
-            console.log('❌ userId tidak ditemukan, skip fetchUserData');
             setLoadingUser(false);
             return;
         }
 
         try {
-            console.log('🔄 Mengambil data user dari API untuk userId:', userId);
             const token = await AsyncStorage.getItem('userToken');
-            console.log('Token tersedia:', !!token);
-
             const response = await api.get(`/users/${userId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                headers: { Authorization: `Bearer ${token}` }
             });
-
-            console.log('✅ Response user data:', JSON.stringify(response.data, null, 2));
 
             if (response.data) {
                 setUserData(response.data);
-                console.log('✅ UserData berhasil diset:', response.data);
             } else if (user) {
-                console.log('⚠️ Fallback ke data dari AuthContext');
                 setUserData({
                     id: user.id,
                     name: user.name || 'Pengguna',
@@ -85,11 +157,8 @@ export default function PendingReviewScreen() {
                 });
             }
         } catch (error: any) {
-            console.error('❌ Error fetching user data:', error.message);
-            console.error('Response error:', error.response?.data);
-            // Fallback ke data dari AuthContext
+            console.error('Error fetching user data:', error.message);
             if (user) {
-                console.log('⚠️ Fallback ke data dari AuthContext karena error');
                 setUserData({
                     id: user.id,
                     name: user.name || 'Pengguna',
@@ -107,41 +176,28 @@ export default function PendingReviewScreen() {
     // Cek status registrasi mitra
     const checkMitraStatus = async () => {
         if (!userId) {
-            console.log('❌ userId tidak ditemukan, skip checkMitraStatus');
             setLoading(false);
             return;
         }
 
         try {
             setLoading(true);
-            console.log('🔄 Mengecek status mitra untuk userId:', userId);
             const response = await api.get(`/mitra/status/${userId}`);
-
-            console.log('✅ Mitra status response:', JSON.stringify(response.data, null, 2));
 
             if (response.data.success && response.data.data) {
                 setMitraStatus(response.data.data);
 
-                // Ambil specialization dari response
+                // Ambil specialization dari API response (lebih fresh, override storage)
                 if (response.data.data.specialization) {
                     const spec = response.data.data.specialization;
-                    console.log('Raw specialization:', spec);
                     if (Array.isArray(spec)) {
                         setSpecializations(spec);
-                        console.log('Specialization sebagai array:', spec);
                     } else if (typeof spec === 'string') {
                         try {
                             const parsed = JSON.parse(spec);
-                            if (Array.isArray(parsed)) {
-                                setSpecializations(parsed);
-                                console.log('Specialization parsed dari JSON:', parsed);
-                            } else {
-                                setSpecializations([spec]);
-                                console.log('Specialization sebagai string biasa:', [spec]);
-                            }
+                            setSpecializations(Array.isArray(parsed) ? parsed : [spec]);
                         } catch (e) {
                             setSpecializations([spec]);
-                            console.log('Specialization (gagal parse):', [spec]);
                         }
                     }
                 }
@@ -149,12 +205,10 @@ export default function PendingReviewScreen() {
                 setMitraStatus(response.data);
                 if (response.data.specialization) {
                     setSpecializations(response.data.specialization);
-                    console.log('Specialization dari response langsung:', response.data.specialization);
                 }
             }
         } catch (error: any) {
-            console.error('❌ Error checking mitra status:', error.message);
-            console.error('Response error:', error.response?.data);
+            console.error('Error checking mitra status:', error.message);
             Toast.show({
                 type: 'error',
                 text1: 'Error',
@@ -182,34 +236,16 @@ export default function PendingReviewScreen() {
         }
     }, [mitraStatus?.is_verified]);
 
+    // Initial load
     useEffect(() => {
-        console.log('=== COMPONENT MOUNTED ===');
-        // Ambil data user dan status mitra
         const loadData = async () => {
+            await loadMitraProfileFromStorage(); // ✅ Load dari storage dulu (cepat, offline)
             await fetchUserData();
             await checkMitraStatus();
         };
 
         loadData();
-
-        // Set interval untuk mengecek status setiap 30 detik
-        const interval = setInterval(() => {
-            if (mitraStatus?.is_verified !== true) {
-                checkMitraStatus();
-            }
-        }, 30000);
-
-        return () => clearInterval(interval);
     }, []);
-
-    // DEBUG: Cek state setelah update
-    useEffect(() => {
-        console.log('=== STATE UPDATE ===');
-        console.log('userData:', userData);
-        console.log('mitraStatus:', mitraStatus);
-        console.log('specializations:', specializations);
-        console.log('==================');
-    }, [userData, mitraStatus, specializations]);
 
     if (loading || loadingUser) {
         return (
@@ -220,7 +256,6 @@ export default function PendingReviewScreen() {
         );
     }
 
-    // Jika sudah terverifikasi, tampilkan loading sambil redirect
     if (mitraStatus?.is_verified === true || isRedirecting) {
         return (
             <View className="flex-1 justify-center items-center bg-white">
@@ -234,24 +269,52 @@ export default function PendingReviewScreen() {
     const displayEmail = userData?.email || user?.email || '-';
     const displayPhone = userData?.phone || user?.phone || '-';
 
-    console.log('=== RENDER DATA ===');
-    console.log('displayName:', displayName);
-    console.log('displayEmail:', displayEmail);
-    console.log('displayPhone:', displayPhone);
-    console.log('specializations:', specializations);
-    console.log('==================');
+    // ✅ Prioritas: API > AsyncStorage untuk setiap field
+    const displaySpecializations = specializations.length > 0
+        ? specializations
+        : (mitraProfileData?.specialization ?? []);
+
+    const displayAddress = mitraProfileData?.address || '-';
+
+    const displayWorkingDays = (mitraProfileData?.working_days ?? [])
+        .map(d => DAY_LABELS[d] ?? d)
+        .join(', ') || '-';
+
+    const displayWorkingHours =
+        mitraProfileData?.working_start && mitraProfileData?.working_end
+            ? `${mitraProfileData.working_start} – ${mitraProfileData.working_end}`
+            : '-';
+
+    const displayRadius = mitraProfileData?.service_radius_km
+        ? `${mitraProfileData.service_radius_km} km`
+        : '-';
+
+    const displayBankName = mitraProfileData?.bank_name || '-';
+    const displayBankAccount = mitraProfileData?.bank_account_number || '-';
+    const displayBankAccountName = mitraProfileData?.bank_account_name || '-';
+
+    const displayRegisteredAt = mitraProfileData?.registered_at
+        ? new Date(mitraProfileData.registered_at).toLocaleString('id-ID', {
+            day: '2-digit', month: 'long', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        })
+        : '-';
 
     return (
         <SafeAreaView className="flex-1 bg-white">
+            {/* Header */}
             <View className="flex-row items-center justify-between px-5 py-4 bg-white border-b border-gray-200">
                 <TouchableOpacity onPress={() => router.back()} className="p-1">
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
                 <Text className="text-lg font-bold text-gray-800">Status Pendaftaran</Text>
-                <View style={{ width: 40 }} />
+                <TouchableOpacity onPress={handleLogout} className="p-1">
+                    <Ionicons name="log-out-outline" size={24} color="#EF4444" />
+                </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, flexGrow: 1 }}>
+                {/* Hero Section */}
                 <View className="items-center mt-10 mb-8">
                     <View className="w-24 h-24 bg-yellow-100 rounded-full items-center justify-center mb-4">
                         <Ionicons name="time-outline" size={50} color="#EAB308" />
@@ -264,6 +327,7 @@ export default function PendingReviewScreen() {
                     </Text>
                 </View>
 
+                {/* Status Banner */}
                 <View className="bg-yellow-50 rounded-xl p-5 mb-6 border border-yellow-200">
                     <View className="flex-row items-center mb-3 gap-2">
                         <Ionicons name="information-circle-outline" size={24} color="#EAB308" />
@@ -275,10 +339,16 @@ export default function PendingReviewScreen() {
                     <Text className="text-gray-700">
                         Proses verifikasi biasanya memakan waktu 1x24 jam.
                     </Text>
+                    {mitraProfileData?.registered_at && (
+                        <Text className="text-gray-400 text-xs mt-3">
+                            Didaftarkan pada: {displayRegisteredAt}
+                        </Text>
+                    )}
                 </View>
 
-                <View className="bg-gray-50 rounded-xl p-5 mb-6">
-                    <Text className="font-bold text-gray-800 mb-3">Informasi Pendaftaran:</Text>
+                {/* ✅ Informasi Akun */}
+                <View className="bg-gray-50 rounded-xl p-5 mb-4">
+                    <Text className="font-bold text-gray-800 mb-3">Informasi Akun</Text>
                     <View className="gap-3">
                         <View className="flex-row">
                             <Text className="text-gray-500 w-32">Status:</Text>
@@ -298,15 +368,13 @@ export default function PendingReviewScreen() {
                             <Text className="text-gray-500 w-32">Telepon:</Text>
                             <Text className="text-gray-700 flex-1">{displayPhone}</Text>
                         </View>
-                        <View className="flex-row">
-                            <Text className="text-gray-500 w-32">Spesialisasi:</Text>
-                            <Text className="text-gray-700 flex-1">
-                                {specializations.length > 0 ? specializations.join(', ') : '-'}
-                            </Text>
-                        </View>
                     </View>
                 </View>
 
+                {/* ✅ Informasi Profesional dari form */}
+
+
+                {/* Kontak Support */}
                 <View className="bg-blue-50 rounded-xl p-5">
                     <View className="flex-row items-center mb-3 gap-2">
                         <Ionicons name="chatbubble-ellipses-outline" size={24} color="#3B82F6" />
@@ -316,9 +384,9 @@ export default function PendingReviewScreen() {
                         Jika ada pertanyaan seputar pendaftaran, silakan hubungi customer support kami.
                     </Text>
                     <TouchableOpacity
-                        className="bg-blue-500 py-3 rounded-xl items-center"
+                        className="bg-[#ff0000] py-3 rounded-xl items-center"
                         onPress={() => {
-                            const phoneNumber = '6281234567890';
+                            const phoneNumber = '6282323907426';
                             router.push(`tel:${phoneNumber}`);
                         }}
                     >
@@ -326,8 +394,9 @@ export default function PendingReviewScreen() {
                     </TouchableOpacity>
                 </View>
 
+                {/* Refresh Manual */}
                 <TouchableOpacity
-                    className="mt-6 py-3 rounded-xl items-center border border-gray-300"
+                    className="mt-6 py-3 rounded-xl items-center border border-gray-300 bg-white"
                     onPress={checkMitraStatus}
                 >
                     <View className="flex-row items-center gap-2">

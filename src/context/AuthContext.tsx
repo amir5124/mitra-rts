@@ -1,3 +1,4 @@
+// src/context/AuthContext.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -16,6 +17,7 @@ interface AuthContextType {
     user: User | null;
     isLoading: boolean;
     isLoggedIn: boolean;
+    authToken: string | null;  // ✅ TAMBAHKAN INI
     login: (token: string, userData: User) => Promise<void>;
     logout: () => Promise<void>;
     updateUser: (userData: Partial<User>) => void;
@@ -33,6 +35,7 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
+    const [authToken, setAuthToken] = useState<string | null>(null);  // ✅ TAMBAHKAN STATE
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -47,6 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ]);
 
             if (token && userData) {
+                setAuthToken(token);  // ✅ SET TOKEN
                 setUser(JSON.parse(userData));
             }
         } catch (error) {
@@ -60,11 +64,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await AsyncStorage.setItem('userToken', token);
         await AsyncStorage.setItem('userData', JSON.stringify(userData));
         await AsyncStorage.setItem('userId', String(userData.id));
+        setAuthToken(token);  // ✅ SET TOKEN
         setUser(userData);
     };
 
     const logout = async () => {
         await AsyncStorage.multiRemove(['userToken', 'userData', 'userId']);
+        setAuthToken(null);  // ✅ CLEAR TOKEN
         setUser(null);
         router.replace('/(auth)/login');
     };
@@ -83,6 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 user,
                 isLoading,
                 isLoggedIn: !!user,
+                authToken,  // ✅ EXPORT TOKEN
                 login,
                 logout,
                 updateUser,

@@ -13,7 +13,9 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import api from '../../src/utils/api';
+import { registerDeviceTokenToBackend } from '../../src/utils/notificationHelper';
 
 export default function RegisterScreen() {
     const router = useRouter();
@@ -65,7 +67,6 @@ export default function RegisterScreen() {
             if (response.data.status) {
                 const { token, user } = response.data;
 
-                // ✅ SIMPAN KE ASYNCSTORAGE
                 if (token && user) {
                     await AsyncStorage.setItem('userToken', token);
                     await AsyncStorage.setItem('userId', String(user.id));
@@ -73,11 +74,27 @@ export default function RegisterScreen() {
                     await AsyncStorage.setItem('userRole', user.role || 'mitra');
 
                     console.log('✅ Data saved to AsyncStorage');
-                    console.log('User ID:', user.id);
-                    console.log('User Name:', user.name);
+
+                    // 🔥 REGISTRASI FCM TOKEN KE BACKEND SETELAH REGISTER BERHASIL
+                    console.log('📱 Registering device token to backend...');
+                    const registerResult = await registerDeviceTokenToBackend(
+                        String(user.id),
+                        token
+                    );
+
+                    if (registerResult.success) {
+                        console.log('✅ Device token registered to backend');
+                        Toast.show({
+                            type: 'success',
+                            text1: 'Notifikasi Aktif',
+                            text2: 'Perangkat Anda siap menerima notifikasi',
+                            visibilityTime: 2000,
+                        });
+                    } else {
+                        console.log('⚠️ Device token registration failed:', registerResult.message);
+                    }
                 }
 
-                // Data untuk dikirim ke halaman register-mitra
                 const userData = {
                     id: response.data.user?.id,
                     name: form.name,
@@ -114,7 +131,7 @@ export default function RegisterScreen() {
                 <TouchableOpacity onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
-                <Text className="text-lg font-bold text-gray-800">Daftar Mitra</Text>
+                <Text className="text-lg font-bold text-gray-800">Daftar Terapis</Text>
                 <View className="w-6" />
             </View>
 
@@ -225,6 +242,7 @@ export default function RegisterScreen() {
                     </View>
                 </View>
             </ScrollView>
+            <Toast />
         </KeyboardAvoidingView>
     );
 }

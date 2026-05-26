@@ -1,36 +1,43 @@
 {
   "expo": {
-    "name": "MitraRTS",
+    "name": "Mitra RTS",
     "slug": "MitraRTS",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png",
     "scheme": "mitrarts",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mitrarts.app"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png",
+        "backgroundImage": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png",
+        "monochromeImage": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mitrarts.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
@@ -38,11 +45,37 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png",
+          "color": "#FF0000",
+          "sounds": [
+            "./assets/sounds/notification.wav"
+          ],
+          "androidMode": "default",
+          "androidCollapsible": true
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "notification": {
+      "icon": "https://res.cloudinary.com/dgsdmgcc7/image/upload/v1779710218/notification-icon_p1ja5d.png",
+      "color": "#FF0000",
+      "iosDisplayInForeground": true,
+      "androidMode": "default",
+      "androidCollapsible": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e60b7760-00d2-418b-a40f-bc091d61ad12"
+      }
+    },
+    "owner": "amirku"
   }
 }

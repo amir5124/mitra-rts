@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -10,11 +11,12 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../../src/context/AuthContext';
 import api from '../../src/utils/api';
+import { registerDeviceTokenToBackend } from '../../src/utils/notificationHelper';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -47,19 +49,35 @@ export default function LoginScreen() {
                     throw new Error("Token atau data user tidak ditemukan dalam respons API");
                 }
 
-                // Cek role (opsional, jika hanya mitra yang boleh login)
-                // if (user.role !== 'mitra') {
-                //     Toast.show({
-                //         type: 'error',
-                //         text1: 'Akses Ditolak',
-                //         text2: 'Hanya akun Mitra yang dapat masuk',
-                //     });
-                //     setLoading(false);
-                //     return;
-                // }
-
                 // Gunakan fungsi login dari AuthContext
                 await login(token, user);
+
+                // 🔥 REGISTRASI FCM TOKEN KE BACKEND SETELAH LOGIN BERHASIL
+                console.log('📱 Registering device token to backend...');
+                const registerResult = await registerDeviceTokenToBackend(
+                    String(user.id),
+                    token
+                );
+
+                if (registerResult.success) {
+                    console.log('✅ Device token registered to backend');
+                    Toast.show({
+                        type: 'success',
+                        text1: 'Notifikasi Aktif',
+                        text2: 'Perangkat Anda siap menerima notifikasi',
+                        visibilityTime: 2000,
+                    });
+                } else {
+                    console.log('⚠️ Device token registration failed:', registerResult.message);
+                    if (registerResult.status === 502) {
+                        Toast.show({
+                            type: 'info',
+                            text1: 'Info',
+                            text2: 'Backend notifikasi sedang dalam persiapan',
+                            visibilityTime: 2000,
+                        });
+                    }
+                }
 
                 Toast.show({
                     type: 'success',
@@ -106,12 +124,18 @@ export default function LoginScreen() {
                 contentContainerStyle={{ paddingBottom: 60, paddingTop: 60 }}
                 className="bg-white flex-1 px-6"
             >
-                <View className="items-center">
-                    <View className="w-24 h-24 bg-red-500 rounded-full items-center justify-center shadow-lg">
-                        <Ionicons name="medical" size={45} color="white" />
+                <View className="items-center mt-24">
+                    <View className="w-24 h-24  rounded-full items-center justify-center">
+                        <Image
+                            source={{
+                                uri: 'https://res.cloudinary.com/dgsdmgcc7/image/upload/v1777178620/rts_d3xz4p.webp',
+                            }}
+                            className="w-24 h-24"
+                            resizeMode="contain"
+                        />
                     </View>
                     <Text className="text-2xl font-bold text-gray-800 mt-5">Mitra RTS</Text>
-                    <Text className="text-gray-500 text-sm mt-1">Aplikasi Terapis Professional</Text>
+                    <Text className="text-gray-500 text-sm mt-1">Aplikasi Terapis RTS</Text>
                 </View>
 
                 <View className="mt-10">
