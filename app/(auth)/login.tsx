@@ -134,7 +134,7 @@ export default function LoginScreen() {
                             resizeMode="contain"
                         />
                     </View>
-                    <Text className="text-2xl font-bold text-gray-800 mt-5">Mitra RTS</Text>
+                    <Text className="text-2xl font-bold text-gray-800 mt-5">Terapis RTS</Text>
                     <Text className="text-gray-500 text-sm mt-1">Aplikasi Terapis RTS</Text>
                 </View>
 

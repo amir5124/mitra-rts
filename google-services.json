@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "650328933933",
+    "project_id": "rtsindonesia-171b4",
+    "storage_bucket": "rtsindonesia-171b4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650328933933:android:5ba759c947a72339375aa4",
+        "android_client_info": {
+          "package_name": "com.mitrarts.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuBC7KRzWU0plJDEo-irZqJrnNY9AlaAc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
