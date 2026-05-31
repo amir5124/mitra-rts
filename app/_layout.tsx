@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
@@ -12,6 +11,7 @@ import Toast, {
   ErrorToast,
   ToastConfig,
 } from 'react-native-toast-message';
+import "../global.css";
 
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { setupNotificationChannels } from '../src/utils/notificationHelper';
